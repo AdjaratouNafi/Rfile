@@ -1,0 +1,476 @@
+---
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: true
+    number_sections: true
+    theme: flatly
+    highlight: tango
+    df_print: paged
+    code_folding: hide
+---
+
+# Student Time Management Solution
+
+```{r, message=FALSE}
+# Load relevant libraries
+library(dplyr)
+library(rcompanion)
+library(tidyverse)
+library(GGally)
+library(clustMixType)
+library(arules)
+library(arulesViz)
+library(plotly)
+library(abind)
+library(timeDate)
+library(rvest)
+
+# Plot Theme
+theme_set <- theme(legend.key = element_rect(fill="black"),
+           legend.background = element_rect(color="white", fill="#263238"),
+           plot.subtitle = element_text(size=6, color="white"),
+           panel.background = element_rect(fill="#dddddd"),
+           panel.border = element_rect(fill=NA),
+           panel.grid.minor.x = element_blank(),
+           panel.grid.major.x = element_blank(),
+           panel.grid.major.y = element_line(color="darkgrey", linetype=2),
+           panel.grid.minor.y = element_blank(),
+           plot.background = element_rect(fill="#263238"),
+           text = element_text(color="white"),
+           axis.text = element_text(color="white"))
+```
+
+### Data Set
+
+**Source** <https://www.kaggle.com/xiaowenlimarketing/international-student-time-management>
+
+```{r}
+# Load the data
+original_data <- read.csv("International students Time management data.csv")
+```
+
+```{r}
+# Check the data
+head(original_data)
+```
+
+```{r}
+# Check how many variables in the data
+colnames(original_data)
+```
+
+Where X6-X17 are
+You often feel that your life is aimless, with no definite purpose
+You never have trouble organizing the things you have to do?
+Once you've started an activity, you persist at it until you've completed it
+Sometimes you feel that the things you have to do during the day just don't seem to matter
+You will plan your activities from day to day.
+You tend to leave things to the last minute?
+You tend to change rather aimlessly from one activity to another during the day.
+You give up the things that you planning to do just because your friend says no.
+You think you do enough with your time.
+You are easy to get bored with your day-today activities.
+The important interests/activities in your life tend to change frequently.
+You know how much time you spend on each of the homework I do.
+
+
+```{r}
+# Subset the relevant data for the cleaning and transformation
+data <- original_data %>%
+    select(-c(Number,Nationality,Program,Course,
+              English,Academic,Attendance))
+```
+
+```{r}
+# Construct the 'clean' function
+clean <- function(x){
+  # Reduce factor levels
+  x$Age <- ifelse(x$Age == "26-30" | x$Age == ">36" | x$Age == "31-35", ">25",x$Age)
+  x$Age <- ifelse(x$Age == "<18", "18-20",x$Age)
+  x$Age <- ordered(x$Age, levels=c("18-20","21-25",">25"))
+  # Change " " into Neither
+  x$X6 <- ifelse(x$X6=="","Neither",x$X6)
+  x$X8 <- ifelse(x$X8=="","Neither",x$X8)
+  x$X9 <- ifelse(x$X9=="","Neither",x$X9)
+  x$X10 <- ifelse(x$X10=="","Neither",x$X10)
+  x$X11 <- ifelse(x$X11=="","Neither",x$X11)
+  x$X12 <- ifelse(x$X12=="","Neither",x$X12)
+  x$X14 <- ifelse(x$X14=="","Neither",x$X14)
+  x$X16 <- ifelse(x$X16=="","Neither",x$X16)
+  x$X17 <- ifelse(x$X17=="","Neither",x$X17)
+  
+  # Transform the character into Likert Scale 
+  x$X6_num <- ifelse(x$X6=="Strong Agree",1,
+                     ifelse(x$X6=="Agree",2,
+                            ifelse(x$X6=="Neither",3,
+                                   ifelse(x$X6=="Disagree",4,5))))
+
+  x$X7_num <- ifelse(x$X7=="Strong Agree",5,
+                     ifelse(x$X7=="Agree",4,
+                            ifelse(x$X7=="Neither",3,
+                                   ifelse(x$X7=="Disagree",2,1))))
+
+  x$X8_num <- ifelse(x$X8=="Strong Agree",5,
+                     ifelse(x$X8=="Agree",4,
+                            ifelse(x$X8=="Neither",3,
+                                   ifelse(x$X8=="Disagree",2,1))))
+
+  x$X9_num <- ifelse(x$X9=="Strong Agree",1,
+                     ifelse(x$X9=="Agree",2,
+                            ifelse(x$X9=="Neither",3,
+                                   ifelse(x$X9=="Disagree",4,5))))
+
+  x$X10_num <- ifelse(x$X10=="Strong Agree",5,
+                      ifelse(x$X10=="Agree",4,
+                             ifelse(x$X10=="Neither",3,
+                                    ifelse(x$X10=="Disagree",2,1))))
+
+  x$X11_num <- ifelse(x$X11=="Strong Agree",1,
+                      ifelse(x$X11=="Agree",2,
+                             ifelse(x$X11=="Neither",3,
+                                    ifelse(x$X11=="Disagree",4,5))))
+
+  x$X12_num <- ifelse(x$X12=="Strong Agree",1,
+                      ifelse(x$X12=="Agree",2,
+                             ifelse(x$X12=="Neither",3,
+                                    ifelse(x$X12=="Disagree",4,5))))
+
+  x$X13_num <- ifelse(x$X13=="Strong Agree",1,
+                      ifelse(x$X13=="Agree",2,
+                             ifelse(x$X13=="Neither",3,
+                                    ifelse(x$X13=="Disagree",4,5))))
+
+  x$X14_num <- ifelse(x$X14=="Strong Agree",5,
+                      ifelse(x$X14=="Agree",4,
+                             ifelse(x$X14=="Neither",3,
+                                    ifelse(x$X14=="Disagree",2,1))))
+
+  x$X15_num <- ifelse(x$X15=="Strong Agree",1,
+                      ifelse(x$X15=="Agree",2,
+                             ifelse(x$X15=="Neither",3,
+                                    ifelse(x$X15=="Disagree",4,5))))
+
+  x$X16_num <- ifelse(x$X16=="Strong Agree",1,
+                      ifelse(x$X16=="Agree",2,
+                             ifelse(x$X16=="Neither",3,
+                                    ifelse(x$X16=="Disagree",4,5))))
+
+  x$X17_num <- ifelse(x$X17=="Strong Agree",5,
+                      ifelse(x$X17=="Agree",4,
+                             ifelse(x$X17=="Neither",3,
+                                    ifelse(x$X17=="Disagree",2,1))))
+
+  # Sum the total score 
+  x$score <- x$X6_num + x$X7_num + x$X8_num + x$X9_num + 
+    x$X10_num + x$X11_num +x$X12_num + x$X13_num +
+    x$X14_num +x$X15_num + x$X16_num +x$X17_num
+  
+  # Character into Factor
+  x <- x %>%
+  mutate_if(is.character,as.factor)
+}
+```
+
+Note: should check one more time about the meaning of the likert scale, can we conclude that as we have a higher total score, then it is better? or worse?
+
+```{r}
+# Apply the clean function into the data
+data <- clean(data)
+```
+
+```{r}
+# check the data
+head(data)
+```
+
+```{r}
+# Visualize the Total Score distribution
+ggplot(data, aes(x = score))+
+  geom_histogram(col = "lightblue")+
+  theme_set + ggtitle("Total Score Distribution")
+```
+Distribution = okay
+
+```{r}
+summary(data$score)
+```
+
+If the mean and median is close, we are on the right track.
+
+```{r}
+# Checking the Age Cummulation based on Gender
+ggplot(data, aes(x = Age)) +
+  geom_bar(aes(x = Age, fill = Gender), position = "dodge") +
+  theme_set + ggtitle("Histogram of Age based on Gender")
+```
+Insight: Students with age interval between 21-25 are better in time management? (Check note)
+
+
+```{r}
+# Checking Score Distribution based on Gender and Age
+ggplot(data, aes(x = Age, y = score)) +
+  geom_boxplot(aes(fill = Gender)) +
+  theme_set + ggtitle("Score Distribution based on Gender and Age") 
+```
+
+## Clustering with K-Means
+
+```{r}
+data_kmean <- data %>%
+  select(-c(15:26))
+```
+
+```{r}
+# Determine the number of clustering use the Elbow Plot
+set.seed(100)
+# wss function to calculate the total distance within member
+wss <- function(k) {
+  kproto(data_kmean, k)$tot.withinss
+}
+
+# Define k = 1 to 10 
+k.values <- 1:10
+```
+
+
+```{r, message=FALSE, include=FALSE}
+# Extract the wss for 2-10 clusters
+wss_values <- map_dbl(k.values, wss)
+```
+
+
+```{r, echo=FALSE}
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       ylim=c(25000,50000),
+       xlim=c(1,10),
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares", main="Elbow Plot for Kmeans")
+```
+
+Why 3? Reason:
+
+```{r}
+# Clustering Model
+set.seed(100) 
+
+# Set the model with 3 clusters
+model_clus <- kproto(data_kmean, 3)
+```
+
+```{r}
+# Input new data as a (for simulation only) 
+a <- c("21-25", "F", "Strong Agree","Strong Disagree","Strong Disagree", 
+       "Strong Agree","Strong Disagree", "Strong Agree","Strong Agree",
+       "Strong Agree","Disagree","Strong Disagree","Strong Disagree",
+       "Strong Disagree")
+```
+
+```{r}
+# New data pre-processing
+# Change the input into a dataframe
+a <- data.frame(a)
+
+# Transpose the input data
+a <- data.frame(t(a))
+
+# Rename the columns 
+colnames(a) <- c("Age","Gender","X6","X7","X8",
+                 "X9","X10","X11","X12","X13",
+                 "X14","X15","X16","X17")
+
+# Apply the function 
+a <- clean(a)
+
+# Since the kproton uses min of 2 observations, 
+# we bind it with the last observation from the original data
+a <- rbind(data[125,],a)
+
+# Subset the input data
+a_kmean <- a %>%
+  select(-c(15:26))
+```
+
+```{r}
+# Predict the model
+set.seed(100)
+test <- predict(model_clus,a_kmean)
+```
+
+```{r}
+# Select the clustering result
+cluster <- append(model_clus$cluster, test$cluster)
+cluster <- as.factor(cluster)
+
+# Make a new data frame from original data + input data
+newdata <- rbind(data,a)
+
+# Column bind data 2 + cluster result
+data_clus <- cbind(newdata, cluster)
+
+# A new data frame only the 'input data' for visualization needs
+data_new <- data_clus[127,]
+```
+
+ Note: avoid use data1 data2, not good for reader
+
+
+```{r}
+#For not overlaping
+set.seed(100)
+jitter <- position_jitter(width = 0.1, height = 0.1)
+
+#plot clustering original
+ggplot(NULL, aes(x = Age, y = score))+
+  geom_point(data = data_kmean, aes(col = as.factor(model_clus$cluster)), 
+             position = jitter) +
+  theme(legend.position = "bottom") +
+  guides(fill=FALSE) +
+  scale_colour_manual(name = "Cluster",
+                      labels = c("Bad", "Good","Normal"),
+                      values = c("red","dark green", "gold")) +
+  theme_set + ggtitle("Clustering Result")
+```
+
+```{r}
+# Boxplot of cluster and score (Optional = I prefer this plotly)
+boxplot_cluster <- ggplot(data_kmean, aes(x = as.factor(model_clus$cluster), y = score)) +
+  geom_boxplot()+
+  labs(title = "Score distribution based on Cluster ", x = "Cluster", y="Score")
+ggplotly(boxplot_cluster)
+```
+
+
+```{r}
+# Plot clustering with new data
+ggplot(NULL,aes(x=Age,y=score))+
+  geom_point(data=data_clus , aes(col=cluster), position = jitter) +
+  geom_jitter(data = data_new, aes(col=cluster), shape=8, size=3, stroke=2) +
+  theme(legend.position = "none") +
+  guides(fill=FALSE) +
+  scale_colour_manual(name="Cluster", labels=c("Bad", "Good","Normal"),
+                      values=c("red","dark green", "gold")) +
+  theme_set + ggtitle("")
+```
+Note: found the red star, means?
+What is the title for this plot?
+
+
+## Association rules
+
+```{r}
+# Take only the survey results & Cluster from Original Data
+data_kmean_clus <- cbind(data_kmean,model_clus$cluster)
+colnames(data_kmean_clus)[16] <- "cluster"
+
+data_arules <- data_kmean_clus %>% 
+  select(c(3:14,16)) # Original survey results and 16 for the cluster identity
+
+data_arules$cluster <- ifelse(data_arules$cluster==1, "Bad",
+                              ifelse(data_arules$cluster==2, "Good", "Normal"))
+
+data_arules$cluster <- as.factor(data_arules$cluster)
+```
+
+
+```{r}
+# Check data_clus
+glimpse(data_arules)
+```
+
+## Bad Time Management
+```{r}
+# Apply the association rules with Apriori Algorithm
+mba_bad <- apriori(data_arules, 
+                   parameter = list(sup = 0.05, conf = 0.5,
+                                    target="rules", minlen=3, maxlen=4),
+                   appearance = list(rhs= "cluster=Bad", default = "lhs"))
+```
+
+```{r}
+# Inspect the rules
+inspect(head(sort(mba_bad, by="lift"),10))[,c(1:5,7)]
+```
+Note: focus on the first 5, they have confidence value = 1.0
+
+```{r}
+# Plot the rules
+plot(head(sort(mba_bad,by="lift"),10),method="graph",)
+```
+
+## Alternative Plots
+
+```{r}
+subRules<-mba_bad[quality(mba_bad)$confidence > 0.2]
+```
+
+### __Interactive Scatter-Plot__
+
+The scatter plot shows the lift for each rule. 
+
+```{r, message=FALSE}
+plotly_arules(subRules)
+```
+
+### __Graph-Based Visualizations__
+
+With this plot, we can see the arrow as a relationship between products. The size of rule is getting bigger as the lift increase. 
+
+```{r}
+# choose the top 10
+top10subRules <- head(subRules, n = 10, by = "confidence")
+plot(top10subRules, method = "graph",  engine = "htmlwidget")
+```
+
+### __Individual Rule Representation__
+
+This representation is also called as Parallel Coordinates Plot. It is useful to visualized which products along with which items cause what kind of sales.
+
+```{r}
+subRules2<-head(subRules, n=10, by="lift")
+plot(subRules2, method="paracoord")
+```
+
+Note: need to transpose/observe/gain deep understanding/making a note for each survey question towards the likert scale to make sure we read this right :)
+
+Note: Please do the same with the following code 
+
+
+## Good Time Management
+
+```{r}
+mba_good <- apriori(data_arules, 
+                    parameter = list(sup = 0.05, conf = 0.5,
+                                     target="rules",minlen=3,maxlen=4),
+                    appearance = list(rhs= "cluster=Good", default = "lhs"))
+```
+
+```{r}
+inspect(head(sort(mba_good, by="lift"),10))[,c(1:5,7)]
+```
+
+```{r}
+plot(head(sort(mba_good,by="lift"),10),
+     method="graph",control=list(layout=igraph::in_circle()))
+```
+
+# Scrape for time management tips
+
+```{r}
+link <- paste0("https://quickbooks.intuit.com/r/employee-management/time-management-tips/#:~:text=If%20you%20want%20to%20improve%20your%20time%20management,compare%20actual%20time%20spent%20and%20estimated%20time%20spent.")
+pages <- read_html(link)
+```
+
+```{r}
+Tips <- pages %>% 
+      html_nodes(".body-article .content-article h2") %>%
+      html_text()
+Tips <- Tips[3:27]
+
+Tips <- as.data.frame(Tips)
+#"or for more info you can clik [here](https://quickbooks.intuit.com/r/employee-management/time-management-tips/#:~:text=If%20you%20want%20to%20improve%20your%20time%20management,compare%20actual%20time%20spent%20and%20estimated%20time%20spent.)" #nanti dicantumin authornya sama linknya kita ambil tips) #thumbs up! well done GB
+```
+
